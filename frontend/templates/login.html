@@ -1,0 +1,14 @@
+<html>
+    <title>Login</title>
+<body>
+    <h3>Login</h3>
+    {% if login_failed %}
+    Login failed!
+    {% endif %}
+    <form name=login method=POST>
+        <input type="text" name="username">
+        <input type="password" name="password">
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>

@@ -1,0 +1,22 @@
+<html>
+    <title>The best place to fleet your beats in the streets!</title>
+    <body>
+        <h1>FleetBeatStreet</h1>
+        {% if 'username' in session %}
+            <h3>Posts by people you follow:</h3>
+            <ul>
+            {% for post in posts %}
+                <li>{{ followed_user_map[post.user_id].username }} said: {{ post.content }}</li>
+            {% endfor %}
+            </ul>
+            <form name=post action='/post' method=POST>
+                <input type="text" name="content">
+                <button type="submit">Submit</button>
+            </form>
+            <a href="/logout">logout</a>
+        {% else %}
+            <p><a href="/register">Register.</a></p>
+            <p><a href="/login">Login.</a></p>
+        {% endif %}
+    </body>
+</html>

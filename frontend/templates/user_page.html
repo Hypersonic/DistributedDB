@@ -1,0 +1,14 @@
+<html>
+    <title>User page</title>
+    <body>
+        <h3>{{ user.username }}</h3>
+        {% if 'username' in session %}
+            <a href="/follow/{{user.uuid}}">Follow</a>
+        {% endif %}
+        <ul>
+        {% for post in posts %}
+            <li>{{ post.content }}</li>
+        {% endfor %}
+        </ul>
+    </body>
+</html>
