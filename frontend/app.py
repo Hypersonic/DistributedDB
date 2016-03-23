@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-from models import User, Post
+from models import User, Post, Follow
+from db import get_users_post_ids, get_users_followed_ids, get_users_follower_ids
 
 app = Flask(__name__)
 app.secret_key = "blerpdy derpdy herpdy shmerpdy"
@@ -13,9 +14,12 @@ def index():
     if 'username' in session:
         try:
             user = User.from_username(session['username'])
-            followed = map(User.from_uuid, user.following_ids)
+            followed = []
+            followed_user_map = {}
+            posts = []
+            followed = map(User.from_uuid, get_users_followed_ids(user.uuid))
             followed_user_map = {u.uuid: u for u in followed}
-            posts = map(Post.from_post_id, sum([follow.post_ids for follow in followed], []))
+            posts = map(Post.from_post_id, sum([get_users_post_ids(follow.uuid) for follow in followed], []))
             posts.sort(key=lambda p: -p.timestamp)
         except KeyError: # for our in-memory DB, when the application restarts we lose users. for convenience, logout automatically
             session.pop('username')
@@ -62,15 +66,13 @@ def post():
         return redirect(url_for('index.html'))
     user = User.from_username(session['username'])
     post = Post.new(user, request.form['content'])
-    user.post_ids.append(post.post_id)
-    user.commit()
     return redirect(url_for('index'))
 
 @app.route('/u/<username>')
 def user_page(username):
     try:
         user = User.from_username(username)
-        posts = map(Post.from_post_id, user.post_ids)
+        posts = map(Post.from_post_id, get_users_post_ids(user.uuid))
         posts.sort(key=lambda p: -p.timestamp)
         return render_template('user_page.html', user=user, posts=posts)
     except KeyError:
@@ -83,10 +85,7 @@ def follow(uuid):
     try:
         to_follow = User.from_uuid(uuid)
         follower = User.from_username(session['username'])
-        to_follow.follower_ids.append(follower.uuid)
-        follower.following_ids.append(to_follow.uuid)
-        to_follow.commit()
-        follower.commit()
+        follow = Follow.new(to_follow.uuid, follower.uuid)
         return redirect(url_for('index'))
     except KeyError as e:
         print e

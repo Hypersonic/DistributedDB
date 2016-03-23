@@ -1,4 +1,4 @@
-from db import add_user, get_user, update_user, add_post, get_post
+from db import add_user, get_user, add_post, get_post, add_follow
 from time import time
 from hashlib import sha1
 
@@ -13,18 +13,12 @@ class User(object):
         self.uuid = None
         self.username = None
         self.hashed_pass = None
-        self.post_ids = None
-        self.follower_ids = None
-        self.following_ids = None
 
     def verify_password(self, password):
         """
         Verify whether or not an **UNHASHED** password matches our internal hashed password
         """
         return self.hashed_pass == User.hash_password(password)
-
-    def commit(self):
-        update_user(self)
 
     @staticmethod
     def hash_password(password):
@@ -47,9 +41,6 @@ class User(object):
         u.uuid = db_data[0]
         u.username = db_data[1]
         u.hashed_pass = db_data[2]
-        u.post_ids = db_data[3]
-        u.follower_ids = db_data[4]
-        u.following_ids = db_data[5]
         return u
     
     @staticmethod
@@ -64,9 +55,6 @@ class User(object):
         u.uuid = db_data[0]
         u.username = db_data[1]
         u.hashed_pass = db_data[2]
-        u.post_ids = db_data[3]
-        u.follower_ids = db_data[4]
-        u.following_ids = db_data[5]
         return u
 
     @staticmethod
@@ -81,9 +69,6 @@ class User(object):
         u.uuid = db_data[0]
         u.username = db_data[1]
         u.hashed_pass = db_data[2]
-        u.post_ids = db_data[3]
-        u.follower_ids = db_data[4]
-        u.following_ids = db_data[5]
         return u
 
 class Post(object):
@@ -123,4 +108,17 @@ class Post(object):
         p.content = db_data[2]
         p.timestamp = db_data[3]
         p.timestamp = db_data[3]
+        return p
+
+class Follow(object):
+    def __init__(self):
+        self.followed_id = None
+        self.follower_id = None
+
+    @staticmethod
+    def new(followed_id, follower_id):
+        db_data = add_follow(followed_id, follower_id)
+        p = Follow()
+        p.followed_id = db_data[0]
+        p.follower_id = db_data[1]
         return p

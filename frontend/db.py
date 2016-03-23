@@ -1,14 +1,49 @@
-# "Table" of users. A list of tuples (uuid, username, hashed_pass, [post_ids], [follower_ids], [following_ids])
-_users = []
+import socket
 
-# "Table" of posts. A list of tuples (post_id, user_id, content, timestamp)
-_posts = []
+def send_request(req):
+    s = socket.socket()
+    host = 'localhost'
+    port = 3001
+    s.connect((host, port))
+    s.send(req + '\n')
+    resp = ""
+    while not resp.endswith("DONE\n"):
+        resp += s.recv(1024)
+    s.close()
+    r = '\n'.join(resp.split('\n')[:-2])
+    return r
+
+def parse_user_reply(s):
+    if s == "NOT FOUND":
+        raise KeyError("No such user!!\n")
+    uuid, username, hashed_pass = s.strip().split(' ')
+    uuid = int(uuid);
+    username = username.decode('hex')
+    return (uuid, username, hashed_pass)
+
+def parse_post_reply(s):
+    if s == "NOT FOUND":
+        raise KeyError("No such post!!\n")
+    post_id, user_id, content, timestamp = s.strip().split(' ')
+    post_id = int(post_id);
+    user_id = int(user_id);
+    content = content.decode('hex')
+    timestamp = int(timestamp)
+    return (post_id, user_id, content, timestamp)
+
+def parse_follow_reply(s):
+    if s == "NOT FOUND":
+        raise KeyError("No such follow!!\n")
+    follower_id, followed_id = s.strip().split(' ')
+    follower_id = int(follower_id);
+    followed_id = int(followed_id);
+    return (follower_id, followed_id)
 
 def add_user(username, hashed_pass):
     """
     Add a user with a given username and hashed password
     
-    Returns the tuple (uuid, username, hashed_pass, [post_ids], [follower_ids])
+    Returns the tuple (uuid, username, hashed_pass)
 
     raises a KeyError if the user already exists in the database
 
@@ -22,47 +57,27 @@ def add_user(username, hashed_pass):
         pass
     if u is not None:
         raise KeyError("User already exists: {}".format(username))
-    uuid = len(_users) # pick uuid to be 1 after the last thing in the list
-    post_ids = [] # obviously a new user doesn't have any posts
-    follower_ids = [] # obviously a new user doesn't have any followers
-    following_ids = [] # obviously a new user doesn't have anyone to follow
-    u = (uuid, username, hashed_pass, post_ids, follower_ids, following_ids)
-    _users.append(u)
+    u = parse_user_reply(send_request("ADD USER " + username.encode('hex') + " " + hashed_pass))
     return u
 
 def get_user(uuid=None, username=None):
     """
     Get a user from the database with either a matching uuid or username.
-    Intentionally implemented inefficiently at the expense of most closely
-    emulating an RDBMS
 
     raises a KeyError if the user cannot be found
     """
     assert(uuid is not None or username is not None)
-    chosen_user = None
     match_uuid = uuid is not None
     print 'match_uuid:',match_uuid,'uuid:',uuid
-    for user in _users:
-        if match_uuid:
-            if uuid == user[0]:
-                chosen_user = user
-                break
-        elif username == user[1]:
-            chosen_user = user
-            break
-    if chosen_user is None:
+    if match_uuid:
+        resp = send_request("GET USER BY USER_ID " + str(uuid) + '\n')
+    else:
+        resp = send_request("GET USER BY USERNAME " + username.encode('hex') + '\n')
+    try:
+        chosen_user = parse_user_reply(resp)
+    except KeyError:
         raise KeyError("User {} not found in DB".format(uuid if match_uuid else username))
     return chosen_user
-
-def update_user(user):
-    idx = 0
-    for i, u in enumerate(_users):
-        if u[0] == user.uuid:
-            idx = i
-            break
-    _users[idx] = \
-        (user.uuid, user.username, user.hashed_pass, \
-        user.post_ids, user.follower_ids, user.following_ids)
 
 def add_post(user_id, post_content, timestamp):
     """
@@ -73,9 +88,7 @@ def add_post(user_id, post_content, timestamp):
     WARNING: Currently, this is not threadsafe. Once there is a proper backend,
              this must be fixed.
     """
-    post_id = len(_posts)
-    p = (post_id, user_id, post_content, timestamp)
-    _posts.append(p)
+    p = parse_post_reply(send_request("ADD POST " + str(user_id) + " " + post_content.encode('hex') + " " + str(timestamp) + '\n'))
     return p
 
 def get_post(post_id=None):
@@ -84,7 +97,24 @@ def get_post(post_id=None):
     
     Raises a KeyError if the id does not exist in the database
     """
-    for post in _posts:
-        if post[0] == post_id:
-            return post
-    raise KeyError("No post found with id: {}".format(post_id))
+    try:
+        return parse_post_reply(send_request("GET POST BY POST_ID " + str(post_id)))
+    except:
+        raise KeyError("No post found with id: {}".format(post_id))
+
+def get_users_post_ids(uuid=None):
+    post_ids = send_request("GET POST BY USER_ID " + str(uuid))
+    return [parse_post_reply(x)[0] for x in post_ids.split("\n")]
+
+def add_follow(followed_id, follower_id):
+    return parse_follow_reply(send_request("ADD FOLLOW " + str(followed_id) + " " + str(follower_id) + "\n"))
+
+def get_users_followed_ids(follower_id):
+    follows = send_request("GET FOLLOWS BY FOLLOWER_ID " + str(follower_id) + "\n")
+    print follows.split('\n')
+    return [parse_follow_reply(x)[0] for x in follows.split("\n") if x]
+
+def get_users_follower_ids(followed_id):
+    follows = send_request("GET FOLLOWS BY FOLLOWED_ID " + str(followed_id) + "\n")
+    print follows.split('\n')
+    return [parse_follow_reply(x)[1] for x in follows.split("\n") if x]
