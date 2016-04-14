@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 from models import User, Post, Follow
 from db import get_users_post_ids, get_users_followed_ids, get_users_follower_ids
 
@@ -23,7 +23,7 @@ def index():
             posts.sort(key=lambda p: -p.timestamp)
         except KeyError: # for our in-memory DB, when the application restarts we lose users. for convenience, logout automatically
             session.pop('username')
-    return render_template('index.html', user=user, posts=posts, followed=followed, followed_user_map=followed_user_map)
+    return render_template('index.html', user=user, posts=posts, followed=followed, followed_user_map=followed_user_map, time=__import__('time'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -39,7 +39,8 @@ def login():
         return redirect(url_for('index'))
     except KeyError as e:
         print e
-        return render_template('login.html', login_failed=True)
+        flash("Login Failed!")
+        return render_template('login.html')
 
 @app.route('/logout')
 def logout():
@@ -58,7 +59,8 @@ def register():
         session['username'] = user.username
         return redirect(url_for('index'))
     except KeyError:
-        return render_template('register.html', register_failed=True)
+        flash("Reigstration failed!")
+        return render_template('register.html')
 
 @app.route('/post', methods=['POST'])
 def post():
@@ -75,7 +77,10 @@ def user_page(username):
         posts = map(Post.from_post_id, get_users_post_ids(user.uuid))
         posts.sort(key=lambda p: -p.timestamp)
         return render_template('user_page.html', user=user, posts=posts)
+    except ValueError: # no posts
+        return render_template('user_page.html', user=user, posts=[])
     except KeyError:
+        print "LOL"
         return render_template('no_such_user.html', username=username)
 
 @app.route('/follow/<int:uuid>')
@@ -85,12 +90,17 @@ def follow(uuid):
     try:
         to_follow = User.from_uuid(uuid)
         follower = User.from_username(session['username'])
-        follow = Follow.new(to_follow.uuid, follower.uuid)
+        if follower.uuid != to_follow.uuid:
+            follow = Follow.new(to_follow.uuid, follower.uuid)
+        else:
+            flash("You can't follow yourself!")
         return redirect(url_for('index'))
     except KeyError as e:
         print e
         return render_template('no_such_user.html', uuid=uuid)
+    except ValueError as e:
+        return redirect(url_for('user_page', username=User.from_uuid(uuid).username))
 
 
 if __name__ == '__main__':
-    app.run('0.0.0.0', port=9001, debug=True)
+    app.run('0.0.0.0', port=9002, debug=True)

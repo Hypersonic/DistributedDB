@@ -6,6 +6,14 @@ User DB::add_user(std::string username, std::string hashed_pass) {
     std::lock_guard<std::mutex>(this->users_mtx);
     User u;
 
+    // check if the user already exists -- we can't re-add
+    auto matched_user = find_if(this->users.begin(), this->users.end(), [&] (User uu) {
+        return uu.username == username;
+    });
+    if (matched_user != this->users.end()) {
+        throw AlreadyExists();
+    }
+
     u.user_id = users.size(); // pick user_id as the number of items in the vector
                               // TODO: Don't do this when we need multiple hosts, 
                               // as it is not guaranteed to be unique amongst all hosts
@@ -94,6 +102,15 @@ std::vector<Post> DB::get_posts_by_user(User user) {
 
 Follow DB::add_follow(size_t followed_id, size_t follower_id) {
     std::lock_guard<std::mutex>(this->follows_mtx);
+
+    // check if the follow already exists -- we can't re-add
+    auto matched_follow = find_if(this->follows.begin(), this->follows.end(), [&] (Follow f) {
+        return f.followed_id == followed_id && f.follower_id == follower_id;
+    });
+    if (matched_follow == this->follows.end()) {
+        throw AlreadyExists();
+    }
+
     Follow f(followed_id, follower_id);
     this->follows.push_back(f);
     return f;

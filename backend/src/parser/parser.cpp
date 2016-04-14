@@ -46,41 +46,46 @@ void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::
     DEBUG("Parsing Query: %s\n", query.data);
     auto ds = split_by_space(query.data);
     if (ds[0] == "ADD") { // ADD query
-        if (ds[1] == "USER") {
-            auto username = hexdecode(ds[2]);
-            auto hashed_pass = ds[3];
-            auto user = db->add_user(username, hashed_pass);
-            auto reply = std::to_string(user.user_id) + ' ' +
-                         hexencode(user.username) + ' ' +
-                         user.hashed_pass + '\n' +
-                         "DONE\n";
-            DEBUG("Replying with: %s\n", reply.c_str());
+        try {
+            if (ds[1] == "USER") {
+                auto username = hexdecode(ds[2]);
+                auto hashed_pass = ds[3];
+                auto user = db->add_user(username, hashed_pass);
+                auto reply = std::to_string(user.user_id) + ' ' +
+                             hexencode(user.username) + ' ' +
+                             user.hashed_pass + '\n' +
+                             "DONE\n";
+                DEBUG("Replying with: %s\n", reply.c_str());
+                send(query.sockfd, reply.c_str(), reply.length(), 0);
+            } else if (ds[1] == "POST") {
+                auto user_id = std::stoi(ds[2]);
+                auto content = hexdecode(ds[3]);
+                auto timestamp = std::stoi(ds[4]);
+                auto post = db->add_post(user_id, content, timestamp);
+                auto reply = std::to_string(post.post_id) + ' ' +
+                             std::to_string(post.user_id) + ' ' +
+                             hexencode(post.content) + ' ' +
+                             std::to_string(post.timestamp) + '\n' + 
+                             "DONE\n";
+                DEBUG("Replying with: %s\n", reply.c_str());
+                send(query.sockfd, reply.c_str(), reply.length(), 0);
+            } else if (ds[1] == "FOLLOW") {
+                auto followed_id = std::stoi(ds[2]);
+                auto follower_id = std::stoi(ds[3]);
+                auto follow = db->add_follow(followed_id, follower_id);
+                auto reply = std::to_string(follow.followed_id) + ' ' +
+                             std::to_string(follow.follower_id) + '\n' + 
+                             "DONE\n";
+                DEBUG("Replying with: %s\n", reply.c_str());
+                send(query.sockfd, reply.c_str(), reply.length(), 0);
+            } else {
+                ERR("Invalid table for ADD: %s\n", ds[1].c_str());
+                // TODO: reply with info
+                return;
+            }
+        } catch (storage::AlreadyExists ae) {
+            std::string reply = "ALREADY EXISTS\nDONE\n"; // error, say already exists
             send(query.sockfd, reply.c_str(), reply.length(), 0);
-        } else if (ds[1] == "POST") {
-            auto user_id = std::stoi(ds[2]);
-            auto content = hexdecode(ds[3]);
-            auto timestamp = std::stoi(ds[4]);
-            auto post = db->add_post(user_id, content, timestamp);
-            auto reply = std::to_string(post.post_id) + ' ' +
-                         std::to_string(post.user_id) + ' ' +
-                         hexencode(post.content) + ' ' +
-                         std::to_string(post.timestamp) + '\n' + 
-                         "DONE\n";
-            DEBUG("Replying with: %s\n", reply.c_str());
-            send(query.sockfd, reply.c_str(), reply.length(), 0);
-        } else if (ds[1] == "FOLLOW") {
-            auto followed_id = std::stoi(ds[2]);
-            auto follower_id = std::stoi(ds[3]);
-            auto follow = db->add_follow(followed_id, follower_id);
-            auto reply = std::to_string(follow.followed_id) + ' ' +
-                         std::to_string(follow.follower_id) + '\n' + 
-                         "DONE\n";
-            DEBUG("Replying with: %s\n", reply.c_str());
-            send(query.sockfd, reply.c_str(), reply.length(), 0);
-        } else {
-            ERR("Invalid table for ADD: %s\n", ds[1].c_str());
-            // TODO: reply with info
-            return;
         }
     } else if (ds[0] == "GET") {
         try {
@@ -171,6 +176,10 @@ void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::
             }
         } catch (storage::NotFound nf) {
             std::string reply = "NOT FOUND\nDONE\n"; // error, say not found
+            send(query.sockfd, reply.c_str(), reply.length(), 0);
+        } catch (std::out_of_range oor) {
+            ERR("Out of range: %s\n", oor.what());
+            std::string reply = "DB ERROR\nDONE\n"; // database error
             send(query.sockfd, reply.c_str(), reply.length(), 0);
         }
     } else {

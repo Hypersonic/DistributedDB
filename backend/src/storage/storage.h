@@ -9,6 +9,9 @@ namespace storage {
     // Dummy class thrown to indicate badness
     class NotFound {
     };
+    // Dummy class thrown to indicate duplicate
+    class AlreadyExists {
+    };
     
     class User {
     public:

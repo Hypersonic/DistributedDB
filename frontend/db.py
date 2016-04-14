@@ -6,6 +6,7 @@ def send_request(req):
     port = 3001
     s.connect((host, port))
     s.send(req + '\n')
+    print "Sending request: {}".format(req)
     resp = ""
     while not resp.endswith("DONE\n"):
         resp += s.recv(1024)
@@ -15,7 +16,9 @@ def send_request(req):
 
 def parse_user_reply(s):
     if s == "NOT FOUND":
-        raise KeyError("No such user!!\n")
+        raise KeyError("No such user!!")
+    elif s == "ALREADY EXISTS":
+        raise ValueError("User already exists!!");
     uuid, username, hashed_pass = s.strip().split(' ')
     uuid = int(uuid);
     username = username.decode('hex')
@@ -23,17 +26,22 @@ def parse_user_reply(s):
 
 def parse_post_reply(s):
     if s == "NOT FOUND":
-        raise KeyError("No such post!!\n")
-    post_id, user_id, content, timestamp = s.strip().split(' ')
-    post_id = int(post_id);
-    user_id = int(user_id);
-    content = content.decode('hex')
-    timestamp = int(timestamp)
-    return (post_id, user_id, content, timestamp)
+        raise KeyError("No such post!!")
+    try:
+        post_id, user_id, content, timestamp = s.strip().split(' ')
+        post_id = int(post_id);
+        user_id = int(user_id);
+        content = content.decode('hex')
+        timestamp = int(timestamp)
+        return (post_id, user_id, content, timestamp)
+    except:
+        raise ValueError("no >:(");
 
 def parse_follow_reply(s):
     if s == "NOT FOUND":
-        raise KeyError("No such follow!!\n")
+        raise KeyError("No such follow!!")
+    elif s == "ALREADY EXISTS":
+        raise ValueError("Follow already exists!!");
     follower_id, followed_id = s.strip().split(' ')
     follower_id = int(follower_id);
     followed_id = int(followed_id);

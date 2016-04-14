@@ -2,11 +2,20 @@
     <title>The best place to fleet your beats in the streets!</title>
     <body>
         <h1>FleetBeatStreet</h1>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="flashes">
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
         {% if 'username' in session %}
             <h3>Posts by people you follow:</h3>
             <ul>
             {% for post in posts %}
-                <li>{{ followed_user_map[post.user_id].username }} said: {{ post.content }}</li>
+            <li>{{ followed_user_map[post.user_id].username }} said: {{ post.content }} at {{ time.ctime(post.timestamp) }}</li>
             {% endfor %}
             </ul>
             <form name=post action='/post' method=POST>
