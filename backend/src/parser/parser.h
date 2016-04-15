@@ -26,6 +26,7 @@
 #include <string>
 #include <memory>
 
+#include "util.h"
 #include "postman/postman.h"
 #include "storage/storage.h"
 

@@ -1,70 +1,31 @@
 #include "parser.h"
 
-std::vector<std::string> split_by_space(std::string in) {
-    std::vector<std::string> vec;
-    std::string curr = "";
-    for_each(in.begin(), in.end(), [&] (char c) {
-        if (c == ' ') {
-            vec.push_back(curr);
-            curr = "";
-        } else if (c != '\n'){
-            curr += c;
-        }
-    });
-    vec.push_back(curr);
-    return vec;
-}
-
-std::string hexdecode(std::string in) {
-    std::string res = "";
-    for (size_t i = 0; i < in.length(); i+=2) {
-        std::string hexstr = "";
-        hexstr += in[i];
-        hexstr += in[i+1];
-        if (hexstr.length() == 2) {
-            res += std::stoi(hexstr, nullptr, 16);
-        } else {
-            ERR("wtf, this isn't hex: %s\n", hexstr.c_str());
-        }
-    }
-    return res;
-}
-
-std::string hexencode(std::string in) {
-    std::string res = "";
-    char buf[3];
-    for_each(in.begin(), in.end(), [&] (char c) {
-        sprintf(buf, "%02x", c);
-        res += buf;
-    });
-    return res;
-}
 
 // TODO: don't assume well-formed queries...
 // TODO: parse will a FSM instead of this spaghetti
 void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::DB> db) {
     DEBUG("Parsing Query: %s\n", query.data);
-    auto ds = split_by_space(query.data);
+    auto ds = util::split_by_space(query.data);
     if (ds[0] == "ADD") { // ADD query
         try {
             if (ds[1] == "USER") {
-                auto username = hexdecode(ds[2]);
+                auto username = util::hexdecode(ds[2]);
                 auto hashed_pass = ds[3];
                 auto user = db->add_user(username, hashed_pass);
                 auto reply = std::to_string(user.user_id) + ' ' +
-                             hexencode(user.username) + ' ' +
+                             util::hexencode(user.username) + ' ' +
                              user.hashed_pass + '\n' +
                              "DONE\n";
                 DEBUG("Replying with: %s\n", reply.c_str());
                 send(query.sockfd, reply.c_str(), reply.length(), 0);
             } else if (ds[1] == "POST") {
                 auto user_id = std::stoi(ds[2]);
-                auto content = hexdecode(ds[3]);
+                auto content = util::hexdecode(ds[3]);
                 auto timestamp = std::stoi(ds[4]);
                 auto post = db->add_post(user_id, content, timestamp);
                 auto reply = std::to_string(post.post_id) + ' ' +
                              std::to_string(post.user_id) + ' ' +
-                             hexencode(post.content) + ' ' +
+                             util::hexencode(post.content) + ' ' +
                              std::to_string(post.timestamp) + '\n' + 
                              "DONE\n";
                 DEBUG("Replying with: %s\n", reply.c_str());
@@ -91,10 +52,10 @@ void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::
         try {
             if (ds[1] == "USER" && ds[2] == "BY")  {
                 if (ds[3] == "USERNAME") {
-                    auto username = hexdecode(ds[4]);
+                    auto username = util::hexdecode(ds[4]);
                     auto user = db->get_user_by_username(username);
                     auto reply = std::to_string(user.user_id) + ' ' +
-                                 hexencode(user.username) + ' ' +
+                                 util::hexencode(user.username) + ' ' +
                                  user.hashed_pass + '\n' + 
                                  "DONE\n";
                     DEBUG("Replying with: %s\n", reply.c_str());
@@ -103,7 +64,7 @@ void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::
                     auto user_id = std::stoi(ds[4]);
                     auto user = db->get_user_by_user_id(user_id);
                     auto reply = std::to_string(user.user_id) + ' ' +
-                                 hexencode(user.username) + ' ' +
+                                 util::hexencode(user.username) + ' ' +
                                  user.hashed_pass + '\n' + 
                                  "DONE\n";
                     DEBUG("Replying with: %s\n", reply.c_str());
@@ -119,7 +80,7 @@ void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::
                     for_each(posts.begin(), posts.end(), [&] (storage::Post post) {
                         auto reply = std::to_string(post.post_id) + ' ' +
                                      std::to_string(post.user_id) + ' ' +
-                                     hexencode(post.content) + ' ' +
+                                     util::hexencode(post.content) + ' ' +
                                      std::to_string(post.timestamp) + '\n'; 
                         DEBUG("Replying with: %s\n", reply.c_str());
                         send(query.sockfd, reply.c_str(), reply.length(), 0);
@@ -131,7 +92,7 @@ void parser::parse_and_execute(postman::Message query, std::shared_ptr<storage::
                     auto post = db->get_post_by_post_id(post_id);
                     auto reply = std::to_string(post.post_id) + ' ' +
                                  std::to_string(post.user_id) + ' ' +
-                                 hexencode(post.content) + ' ' +
+                                 util::hexencode(post.content) + ' ' +
                                  std::to_string(post.timestamp) + '\n' + 
                                  "DONE\n";
                     DEBUG("Replying with: %s\n", reply.c_str());

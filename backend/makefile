@@ -42,6 +42,7 @@ endif
 
 
 run: all
+	@touch users posts follows
 	./$(BNRY)
 
 all: $(BNRY)

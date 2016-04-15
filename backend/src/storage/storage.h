@@ -4,6 +4,9 @@
 #include <mutex>
 #include <functional>
 #include <algorithm>
+#include <fstream>
+
+#include "util.h"
 
 namespace storage {
     // Dummy class thrown to indicate badness
@@ -60,8 +63,8 @@ namespace storage {
         std::vector<Follow> get_follows_by_follower_id(size_t follower_id);
 
         // TODO: Implement saving and loading
-        void save(std::string user_file, std::string post_file);
-        void load(std::string user_file, std::string post_file);
+        void save(std::string user_file_name, std::string post_file_name, std::string follow_file_name);
+        void load(std::string user_file_name, std::string post_file_name, std::string follow_file_name);
     private:
         std::vector<User> users;
         std::mutex users_mtx;

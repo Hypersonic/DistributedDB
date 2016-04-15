@@ -168,3 +168,93 @@ std::vector<Follow> DB::get_follows_by_follower_id(size_t follower_id) {
 
     return results;
 }
+
+void DB::save(std::string user_file_name, std::string post_file_name, std::string follow_file_name) {
+    std::ofstream user_file(user_file_name);
+    std::ofstream post_file(post_file_name);
+    std::ofstream follow_file(follow_file_name);
+
+    std::lock(this->users_mtx, this->posts_mtx, this->follows_mtx);
+    std::lock_guard<std::mutex>(this->users_mtx, std::adopt_lock);
+    std::lock_guard<std::mutex>(this->posts_mtx, std::adopt_lock);
+    std::lock_guard<std::mutex>(this->follows_mtx, std::adopt_lock);
+
+    auto serialize_user = [] (User u) {
+        return std::to_string(u.user_id) + ' ' +
+               util::hexencode(u.username) + ' ' +
+               u.hashed_pass;
+    };
+    auto serialize_post = [] (Post p) {
+        return std::to_string(p.post_id) + ' ' +
+               std::to_string(p.user_id) + ' ' +
+               util::hexencode(p.content) + ' ' +
+               std::to_string(p.timestamp);
+    };
+    auto serialize_follow = [] (Follow f) {
+        return std::to_string(f.followed_id) + ' ' + 
+               std::to_string(f.follower_id);
+    };
+
+    for_each(this->users.begin(), this->users.end(), [&] (User u) {
+        user_file << serialize_user(u) << '\n';
+    });
+    for_each(this->posts.begin(), this->posts.end(), [&] (Post p) {
+        post_file << serialize_post(p) << '\n';
+    });
+    for_each(this->follows.begin(), this->follows.end(), [&] (Follow f) {
+        post_file << serialize_follow(f) << '\n';
+    });
+
+    user_file.close();
+    post_file.close();
+    follow_file.close();
+}
+
+void DB::load(std::string user_file_name, std::string post_file_name, std::string follow_file_name) {
+    std::ifstream user_file(user_file_name);
+    std::ifstream post_file(post_file_name);
+    std::ifstream follow_file(follow_file_name);
+
+    std::lock(this->users_mtx, this->posts_mtx, this->follows_mtx);
+    std::lock_guard<std::mutex>(this->users_mtx, std::adopt_lock);
+    std::lock_guard<std::mutex>(this->posts_mtx, std::adopt_lock);
+    std::lock_guard<std::mutex>(this->follows_mtx, std::adopt_lock);
+
+    auto deserialize_user = [] (std::string line) {
+        User u;
+        auto ds = util::split_by_space(line);
+        u.user_id = std::stoi(ds[0]);
+        u.username = util::hexdecode(ds[1]);
+        u.hashed_pass = ds[2];
+        return u;
+    };
+    auto deserialize_post = [] (std::string line) {
+        Post p;
+        auto ds = util::split_by_space(line);
+        p.post_id = std::stoi(ds[0]);
+        p.user_id = std::stoi(ds[1]);
+        p.content = util::hexdecode(ds[2]);
+        p.timestamp = std::stoi(ds[3]);
+        return p;
+    };
+    auto deserialize_follow = [] (std::string line) {
+        Follow f;
+        auto ds = util::split_by_space(line);
+        f.followed_id = std::stoi(ds[0]);
+        f.follower_id = std::stoi(ds[1]);
+        return f;
+    };
+    std::string line;
+    while (!getline(user_file, line).eof()) {
+        this->users.push_back(deserialize_user(line));
+    }
+    while (!getline(post_file, line).eof()) {
+        this->posts.push_back(deserialize_post(line));
+    }
+    while (!getline(follow_file, line).eof()) {
+        this->follows.push_back(deserialize_follow(line));
+    }
+    user_file.close();
+    post_file.close();
+    follow_file.close();
+}
