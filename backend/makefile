@@ -9,7 +9,7 @@ FLAGS  = -ffast-math -Werror -Wall -Wextra -Wfloat-equal -Wshadow -Wcast-align -
 CFLAGS = 
 
 ifeq ($(MACHINE), Linux) # Linux-specific setup
-	LIBS = 
+	LIBS = -pthread
 	FLAGS += -DUNIX
 else
 ifeq ($(MACHINE), Darwin) # OSX specific setup
@@ -41,10 +41,6 @@ endif
 
 
 
-run: all
-	@touch users posts follows
-	./$(BNRY)
-
 all: $(BNRY)
 
 clean:
@@ -61,5 +57,9 @@ $(OBJS): | $(DIRS)
 
 $(BUILD)/$(MODE)/%.o: %.cpp
 	$(CXX) $(FLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+
+run: all
+	@touch users posts follows
+	./$(BNRY)
 
 -include $(DEPS)

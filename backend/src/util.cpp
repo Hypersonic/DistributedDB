@@ -1,18 +1,26 @@
 #include "util.h"
 
-std::vector<std::string> util::split_by_space(std::string in) {
+std::vector<std::string> util::split(std::string in, char splitchar) {
     std::vector<std::string> vec;
     std::string curr = "";
     for_each(in.begin(), in.end(), [&] (char c) {
-            if (c == ' ') {
-            vec.push_back(curr);
-            curr = "";
-            } else if (c != '\n'){
-            curr += c;
+            if (c == splitchar) {
+                vec.push_back(curr);
+                curr = "";
+            } else {
+                curr += c;
             }
             });
     vec.push_back(curr);
     return vec;
+}
+
+std::string util::join(std::vector<std::string> in, char joinchar) {
+    std::string ret = "";
+    for_each(in.begin(), in.end(), [&] (std::string s) {
+        ret += s + joinchar;
+    });
+    return ret;
 }
 
 std::string util::hexdecode(std::string in) {
@@ -38,4 +46,8 @@ std::string util::hexencode(std::string in) {
         res += buf;
     });
     return res;
+}
+
+bool util::contains(std::string s, std::string val) {
+    return s.find(val) != std::string::npos;
 }

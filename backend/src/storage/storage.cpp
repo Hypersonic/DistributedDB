@@ -23,6 +23,12 @@ User DB::add_user(std::string username, std::string hashed_pass) {
     return u;
 }
 
+User DB::add_user(User user) {
+    std::lock_guard<std::mutex>(this->users_mtx);
+    users.push_back(user);
+    return user;
+}
+
 User DB::get_user_by_user_id(size_t user_id) {
     std::lock_guard<std::mutex>(this->users_mtx);
     auto user = find_if(this->users.begin(), this->users.end(), [&] (User u) {
@@ -60,6 +66,12 @@ Post DB::add_post(size_t user_id, std::string content, size_t timestamp) {
 
     posts.push_back(p);
     return p;
+}
+
+Post DB::add_post(Post post) {
+    std::lock_guard<std::mutex>(this->posts_mtx);
+    posts.push_back(post);
+    return post;
 }
 
 Post DB::get_post_by_post_id(size_t post_id) {
@@ -114,6 +126,12 @@ Follow DB::add_follow(size_t followed_id, size_t follower_id) {
     Follow f(followed_id, follower_id);
     this->follows.push_back(f);
     return f;
+}
+
+Follow DB::add_follow(Follow follow) {
+    std::lock_guard<std::mutex>(this->follows_mtx);
+    follows.push_back(follow);
+    return follow;
 }
 
 std::vector<Follow> DB::get_follows_by_followed_id(size_t followed_id) {
@@ -179,22 +197,6 @@ void DB::save(std::string user_file_name, std::string post_file_name, std::strin
     std::lock_guard<std::mutex>(this->posts_mtx, std::adopt_lock);
     std::lock_guard<std::mutex>(this->follows_mtx, std::adopt_lock);
 
-    auto serialize_user = [] (User u) {
-        return std::to_string(u.user_id) + ' ' +
-               util::hexencode(u.username) + ' ' +
-               u.hashed_pass;
-    };
-    auto serialize_post = [] (Post p) {
-        return std::to_string(p.post_id) + ' ' +
-               std::to_string(p.user_id) + ' ' +
-               util::hexencode(p.content) + ' ' +
-               std::to_string(p.timestamp);
-    };
-    auto serialize_follow = [] (Follow f) {
-        return std::to_string(f.followed_id) + ' ' + 
-               std::to_string(f.follower_id);
-    };
-
     for_each(this->users.begin(), this->users.end(), [&] (User u) {
         user_file << serialize_user(u) << '\n';
     });
@@ -220,30 +222,6 @@ void DB::load(std::string user_file_name, std::string post_file_name, std::strin
     std::lock_guard<std::mutex>(this->posts_mtx, std::adopt_lock);
     std::lock_guard<std::mutex>(this->follows_mtx, std::adopt_lock);
 
-    auto deserialize_user = [] (std::string line) {
-        User u;
-        auto ds = util::split_by_space(line);
-        u.user_id = std::stoi(ds[0]);
-        u.username = util::hexdecode(ds[1]);
-        u.hashed_pass = ds[2];
-        return u;
-    };
-    auto deserialize_post = [] (std::string line) {
-        Post p;
-        auto ds = util::split_by_space(line);
-        p.post_id = std::stoi(ds[0]);
-        p.user_id = std::stoi(ds[1]);
-        p.content = util::hexdecode(ds[2]);
-        p.timestamp = std::stoi(ds[3]);
-        return p;
-    };
-    auto deserialize_follow = [] (std::string line) {
-        Follow f;
-        auto ds = util::split_by_space(line);
-        f.followed_id = std::stoi(ds[0]);
-        f.follower_id = std::stoi(ds[1]);
-        return f;
-    };
     std::string line;
     while (!getline(user_file, line).eof()) {
         this->users.push_back(deserialize_user(line));
@@ -257,4 +235,64 @@ void DB::load(std::string user_file_name, std::string post_file_name, std::strin
     user_file.close();
     post_file.close();
     follow_file.close();
+}
+
+std::string storage::serialize_user(User user) {
+    return std::to_string(user.user_id)   + ' ' +
+           util::hexencode(user.username) + ' ' +
+           user.hashed_pass;
+}
+
+User storage::deserialize_user(std::string line) {
+    User u;
+    auto ds = util::split(line, ' ');
+    u.user_id = std::stoi(ds[0]);
+    u.username = util::hexdecode(ds[1]);
+    u.hashed_pass = ds[2];
+    return u;
+}
+
+Post storage::deserialize_post(std::string line) {
+    Post p;
+    auto ds = util::split(line, ' ');
+    p.post_id = std::stoi(ds[0]);
+    p.user_id = std::stoi(ds[1]);
+    p.content = util::hexdecode(ds[2]);
+    p.timestamp = std::stoi(ds[3]);
+    return p;
+}
+
+std::string storage::serialize_post(Post post) {
+    return std::to_string(post.post_id)  + ' ' +
+           std::to_string(post.user_id)  + ' ' +
+           util::hexencode(post.content) + ' ' +
+           std::to_string(post.timestamp);
+}
+
+Follow storage::deserialize_follow(std::string line) {
+    Follow f;
+    auto ds = util::split(line, ' ');
+    f.followed_id = std::stoi(ds[0]);
+    f.follower_id = std::stoi(ds[1]);
+    return f;
+}
+
+std::string storage::serialize_follow(Follow follow) { 
+    return std::to_string(follow.followed_id) + ' ' +
+           std::to_string(follow.follower_id);
+}
+
+Host storage::deserialize_host(std::string line) {
+    auto host_split = util::split(line, ':');
+    auto port = std::stoi(host_split[1]);
+
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(port);
+    if (inet_aton(host_split[0].c_str(), (in_addr *) &dest.sin_addr.s_addr) == 0) {
+        ERR("Bad server address: %s\n", host_split[0].c_str());
+        throw std::invalid_argument("Bad server address!");
+    }
+    return Host(dest.sin_addr.s_addr, port);
 }

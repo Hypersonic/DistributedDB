@@ -1,8 +1,8 @@
 #pragma once
-/** The parser parses queries... No, really.
+/** The parser parses messages... No, really.
  *
  * The query syntax is quite simple:
- *      <query>       ::= <add_query>|<get_query> <EOL>
+ *      <query>       ::= <add_query>|<get_query>|<dump_query>|<save_query>|<load_query>|<ping_query> <EOL>
  *
  *      <add_query>   ::= "ADD " <user_add>|<post_add>|<follow_add>
  *      <user_add>    ::= "USER " <username_hexencoded> " " <hashed_pass>
@@ -19,6 +19,21 @@
  *      follower_get  ::= "FOLLOWER_ID " <user_id>
  *      followed_get  ::= "FOLLOWED_ID " <user_id>
  *
+ *      <dump_query>  ::= "DUMP"
+ *      
+ *      <save_query>  ::= "SAVE"
+ *      
+ *      <load_query>  ::= "LOAD"
+ *      
+ *      <ping_query>  ::= "PING"
+ *
+ *
+ * The MGMT syntax:
+ *
+ *      <mgmt>        ::= <add_node_query>
+ *
+ *      <add_node_query> ::= "ADD_NODE" <EOL> <node_info> <EOL>
+ *      <node_info>      ::= <port>
  *
  */
 
@@ -27,9 +42,10 @@
 #include <memory>
 
 #include "util.h"
+#include "globals.h"
 #include "postman/postman.h"
 #include "storage/storage.h"
 
 namespace parser {
-    void parse_and_execute(postman::Message query, std::shared_ptr<storage::DB> db);
+    void parse_and_execute(std::vector<postman::Message> messages, std::shared_ptr<storage::DB> db);
 }
