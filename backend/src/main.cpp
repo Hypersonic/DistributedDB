@@ -25,6 +25,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    srand(time(NULL) + getpid());
+
     long port;
     try {
         port = std::stoi(argv[1]);
@@ -37,10 +39,9 @@ int main(int argc, char **argv) {
     LOG("Postmaster general has been spawned.\n");
     signal(SIGINT, sigint_handler);
 
-    mt_gox = std::make_shared<storage::DB>();
+    mt_gox = std::make_shared<storage::DB>(storage::Host(0, port, rand())); // we can assume our ip is 0 because 0.0.0.0;
 
-    mt_gox->myself_host = std::make_shared<storage::Host>(0, port); // we can assume our ip is 0 because 0.0.0.0
-    mt_gox->myself_host->next = mt_gox->myself_host;
+    mt_gox->hosts.insert(mt_gox->myself_host);
 
 #ifdef DEBUG_MODE
     std::ofstream logfile("querylog");

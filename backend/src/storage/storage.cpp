@@ -14,9 +14,6 @@ User DB::add_user(std::string username, std::string hashed_pass) {
         throw AlreadyExists();
     }
 
-    u.user_id = users.size(); // pick user_id as the number of items in the vector
-                              // TODO: Don't do this when we need multiple hosts, 
-                              // as it is not guaranteed to be unique amongst all hosts
     u.username = username;
     u.hashed_pass = hashed_pass;
     users.push_back(u);
@@ -27,18 +24,6 @@ User DB::add_user(User user) {
     std::lock_guard<std::mutex>(this->users_mtx);
     users.push_back(user);
     return user;
-}
-
-User DB::get_user_by_user_id(size_t user_id) {
-    std::lock_guard<std::mutex>(this->users_mtx);
-    auto user = find_if(this->users.begin(), this->users.end(), [&] (User u) {
-        return u.user_id == user_id;
-    });
-    if (user != this->users.end()) {
-        return *user;
-    } else {
-        throw NotFound();
-    }
 }
 
 User DB::get_user_by_username(std::string username) {
@@ -53,14 +38,11 @@ User DB::get_user_by_username(std::string username) {
     }
 }
 
-Post DB::add_post(size_t user_id, std::string content, size_t timestamp) {
+Post DB::add_post(std::string username, std::string content, size_t timestamp) {
     std::lock_guard<std::mutex>(this->posts_mtx);
     Post p;
 
-    p.post_id = posts.size(); // pick post_id as the number of items in the vector
-                              // TODO: Don't do this when we need multiple hosts, 
-                              // as it is not guaranteed to be unique amongst all hosts
-    p.user_id = user_id;
+    p.username = username;
     p.content = content;
     p.timestamp = timestamp;
 
@@ -74,25 +56,13 @@ Post DB::add_post(Post post) {
     return post;
 }
 
-Post DB::get_post_by_post_id(size_t post_id) {
-    std::lock_guard<std::mutex>(this->posts_mtx);
-    auto post = find_if(this->posts.begin(), this->posts.end(), [&] (Post p) {
-        return p.post_id == post_id;
-    });
-    if (post != this->posts.end()) {
-        return *post;
-    } else {
-        throw NotFound();
-    }
-}
-
 std::vector<Post> DB::get_posts_by_user(User user) {
     std::lock_guard<std::mutex>(this->posts_mtx);
     std::vector<Post> results;
 
     // predicate indicating a post is relevant to us
     auto post_matches = [&] (Post p) {
-        return p.user_id == user.user_id;
+        return p.username == user.username;
     };
 
     auto lo = this->posts.begin();
@@ -112,18 +82,18 @@ std::vector<Post> DB::get_posts_by_user(User user) {
     return results;
 }
 
-Follow DB::add_follow(size_t followed_id, size_t follower_id) {
+Follow DB::add_follow(std::string followed_username, std::string follower_username) {
     std::lock_guard<std::mutex>(this->follows_mtx);
 
     // check if the follow already exists -- we can't re-add
     auto matched_follow = find_if(this->follows.begin(), this->follows.end(), [&] (Follow f) {
-        return f.followed_id == followed_id && f.follower_id == follower_id;
+        return f.followed_username == followed_username && f.follower_username == follower_username;
     });
-    if (matched_follow == this->follows.end()) {
+    if (matched_follow != this->follows.end()) {
         throw AlreadyExists();
     }
 
-    Follow f(followed_id, follower_id);
+    Follow f(followed_username, follower_username);
     this->follows.push_back(f);
     return f;
 }
@@ -134,13 +104,13 @@ Follow DB::add_follow(Follow follow) {
     return follow;
 }
 
-std::vector<Follow> DB::get_follows_by_followed_id(size_t followed_id) {
+std::vector<Follow> DB::get_follows_by_followed_username(std::string followed_username) {
     std::lock_guard<std::mutex>(this->follows_mtx);
     std::vector<Follow> results;
 
     // predicate indicating a follow is relevant to us
     auto follow_matches = [&] (Follow f) {
-        return f.followed_id == followed_id;
+        return f.followed_username == followed_username;
     };
 
     auto lo = this->follows.begin();
@@ -160,14 +130,14 @@ std::vector<Follow> DB::get_follows_by_followed_id(size_t followed_id) {
     return results;
 }
 
-std::vector<Follow> DB::get_follows_by_follower_id(size_t follower_id) {
+std::vector<Follow> DB::get_follows_by_follower_username(std::string follower_username) {
     std::lock_guard<std::mutex>(this->follows_mtx);
 
     std::vector<Follow> results;
 
     // predicate indicating a follow is relevant to us
     auto follow_matches = [&] (Follow f) {
-        return f.follower_id == follower_id;
+        return f.follower_username == follower_username;
     };
 
     auto lo = this->follows.begin();
@@ -238,48 +208,44 @@ void DB::load(std::string user_file_name, std::string post_file_name, std::strin
 }
 
 std::string storage::serialize_user(User user) {
-    return std::to_string(user.user_id)   + ' ' +
-           util::hexencode(user.username) + ' ' +
+    return util::hexencode(user.username) + ' ' +
            user.hashed_pass;
 }
 
 User storage::deserialize_user(std::string line) {
     User u;
     auto ds = util::split(line, ' ');
-    u.user_id = std::stoi(ds[0]);
-    u.username = util::hexdecode(ds[1]);
-    u.hashed_pass = ds[2];
+    u.username = util::hexdecode(ds[0]);
+    u.hashed_pass = ds[1];
     return u;
 }
 
 Post storage::deserialize_post(std::string line) {
     Post p;
     auto ds = util::split(line, ' ');
-    p.post_id = std::stoi(ds[0]);
-    p.user_id = std::stoi(ds[1]);
-    p.content = util::hexdecode(ds[2]);
-    p.timestamp = std::stoi(ds[3]);
+    p.username = util::hexdecode(ds[0]);
+    p.content = util::hexdecode(ds[1]);
+    p.timestamp = std::stoi(ds[2]);
     return p;
 }
 
 std::string storage::serialize_post(Post post) {
-    return std::to_string(post.post_id)  + ' ' +
-           std::to_string(post.user_id)  + ' ' +
-           util::hexencode(post.content) + ' ' +
+    return util::hexencode(post.username) + ' ' +
+           util::hexencode(post.content)  + ' ' +
            std::to_string(post.timestamp);
 }
 
 Follow storage::deserialize_follow(std::string line) {
     Follow f;
     auto ds = util::split(line, ' ');
-    f.followed_id = std::stoi(ds[0]);
-    f.follower_id = std::stoi(ds[1]);
+    f.followed_username = util::hexdecode(ds[0]);
+    f.follower_username = util::hexdecode(ds[1]);
     return f;
 }
 
 std::string storage::serialize_follow(Follow follow) { 
-    return std::to_string(follow.followed_id) + ' ' +
-           std::to_string(follow.follower_id);
+    return util::hexencode(follow.followed_username) + ' ' +
+           util::hexencode(follow.follower_username);
 }
 
 Host storage::deserialize_host(std::string line) {
@@ -294,5 +260,11 @@ Host storage::deserialize_host(std::string line) {
         ERR("Bad server address: %s\n", host_split[0].c_str());
         throw std::invalid_argument("Bad server address!");
     }
-    return Host(dest.sin_addr.s_addr, port);
+
+    auto id = std::stoi(host_split[2]);
+    return Host(dest.sin_addr.s_addr, port, id);
+}
+
+bool storage::operator<(Host lhs, Host rhs) {
+    return lhs.id < rhs.id;
 }

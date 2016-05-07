@@ -6,18 +6,16 @@
  *
  *      <add_query>   ::= "ADD " <user_add>|<post_add>|<follow_add>
  *      <user_add>    ::= "USER " <username_hexencoded> " " <hashed_pass>
- *      <post_add>    ::= "POST " <user_id> " " <content_hexencoded> " " <timestamp>
+ *      <post_add>    ::= "POST " <username_hexencoded> " " <content_hexencoded> " " <timestamp>
  *      <follow_add>  ::= "FOLLOW " <followed_id> " " <follower_id>
  *      
  *      <get_query>   ::= "GET " <user_get>|<post_get>|<follow_get>
- *      <user_get>    ::= "USER BY " <by_username>|<by_user_id>
+ *      <user_get>    ::= "USER BY " <by_username>
  *      <by_username> ::= "USERNAME " <username_hexencoded>
- *      <by_user_id>  ::= "USER_ID " <user_id>
- *      <post_get>    ::= "POST BY " <by_user_id>|<by_post_id>
- *      <by_post_id>  ::= "POST_ID " <post_id>
+ *      <post_get>    ::= "POST BY " <by_username>
  *      <follow_get>  ::= "FOLLOWS BY " <follower_get>|<followed_get>
- *      follower_get  ::= "FOLLOWER_ID " <user_id>
- *      followed_get  ::= "FOLLOWED_ID " <user_id>
+ *      follower_get  ::= "FOLLOWER " <username_hexencoded>
+ *      followed_get  ::= "FOLLOWED " <username_hexencoded>
  *
  *      <dump_query>  ::= "DUMP"
  *      
@@ -27,13 +25,6 @@
  *      
  *      <ping_query>  ::= "PING"
  *
- *
- * The MGMT syntax:
- *
- *      <mgmt>        ::= <add_node_query>
- *
- *      <add_node_query> ::= "ADD_NODE" <EOL> <node_info> <EOL>
- *      <node_info>      ::= <port>
  *
  */
 

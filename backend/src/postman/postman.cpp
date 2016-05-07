@@ -124,7 +124,7 @@ void postman::Postman::connect_to_cluster(std::string hostname, long port, std::
         throw ConnectionFailure();
     }
 
-    sprintf(buf, "MGMT\nADD_NODE\n%d\nDONE\n", this->listen_port);
+    sprintf(buf, "MGMT\nADD_NODE\n%d:%d\nDONE\n", this->listen_port, db->myself_host.id);
     std::string initiator_cmd = buf;
     send(sockfd, initiator_cmd.c_str(), initiator_cmd.length(), 0);
 
@@ -142,28 +142,13 @@ void postman::Postman::connect_to_cluster(std::string hostname, long port, std::
 
     DEBUG("Recieved graph info, parsing...\n");
 
+    DEBUG("Resp: %s\n", resp.c_str());
     auto unparsed_hosts = util::split(resp, '\n');
-    std::vector<std::shared_ptr<storage::Host>> hosts;
     for_each(unparsed_hosts.begin(), unparsed_hosts.end()-2, [&] (std::string unparsed_host) {
         DEBUG("Adding host to ring: %s\n", unparsed_host.c_str());
-        auto pair = util::split(unparsed_host, ':');
-        long addr, server_port;
-        if (inet_aton(pair[0].c_str(), (in_addr *) &addr) == 0) {
-            ERR("Couldn't convert IP to hostname: %s\n", pair[0].c_str());
-            throw ConnectionFailure();
-        }
-        server_port = std::stoi(pair[1]);
-        std::shared_ptr<storage::Host> host = std::make_shared<storage::Host>(addr, server_port);
-        hosts.push_back(host);
+        auto host = storage::deserialize_host(unparsed_host);
+        db->hosts.insert(host);
     });
-
-    // Assemble pairs
-    for (size_t i = 0; i < hosts.size()-1; i++) {
-        hosts[i]->next = hosts[i+1];
-    }
-    // insert first and last around myself_host to create the cycle
-    hosts[hosts.size()-1]->next = db->myself_host;
-    db->myself_host->next = hosts[0];
 
     // At this point, the new machine is in the cluster, and will recieve
     //  updates.
@@ -184,77 +169,19 @@ void postman::Postman::connect_to_cluster(std::string hostname, long port, std::
             break;
         }
     }
-    std::vector<std::string> unparsed_users = util::split(resp, '\n');
-    std::vector<std::shared_ptr<storage::User>> users;
-    for_each(unparsed_users.begin(), unparsed_users.end()-1, [&] (std::string user_str) {
-            if (user_str == "DONE" || user_str == "") return;
-            DEBUG("Parsing user data: %s\n", user_str.c_str());
-            auto user = std::make_shared<storage::User>(storage::deserialize_user(user_str));
-            users.push_back(user);
-    });
-    DEBUG("Done recieving users...\n");
 
-    resp = "";
-    memset(buf, 0, sizeof(buf));
-    while (recv(sockfd, buf, sizeof(buf), 0) > 0) {
-        resp += buf;
-        memset(buf, 0, sizeof(buf));
-        if (util::contains(resp, "DONE\n")) {
-            break;
-        }
-    }
-    std::vector<std::string> unparsed_posts = util::split(resp, '\n');
-    std::vector<std::shared_ptr<storage::Post>> posts;
-    for_each(unparsed_posts.begin(), unparsed_posts.end()-1, [&] (std::string post_str) {
-            if (post_str == "DONE" || post_str == "") return;
-            DEBUG("Parsing post data: %s\n", post_str.c_str());
-            auto post = std::make_shared<storage::Post>(storage::deserialize_post(post_str));
+    DEBUG("Got existing data: %s\n", resp.c_str());
 
-            posts.push_back(post);
-    });
-    DEBUG("Done recieving posts...\n");
+    auto cu = postman::deserialize_cluster_update(resp);
 
-    resp = "";
-    memset(buf, 0, sizeof(buf));
-    while (recv(sockfd, buf, sizeof(buf), 0) > 0) {
-        resp += buf;
-        memset(buf, 0, sizeof(buf));
-        if (util::contains(resp, "DONE\n")) {
-            break;
-        }
-    }
-    DEBUG("Parsing follows...\n");
-    std::vector<std::string> unparsed_follows = util::split(resp, '\n');
-    std::vector<std::shared_ptr<storage::Follow>> follows;
-    for_each(unparsed_follows.begin(), unparsed_follows.end()-1, [&] (std::string follow_str) {
-            if (follow_str == "DONE" || follow_str == "") return;
-            DEBUG("Parsing follow data: %s\n", follow_str.c_str());
-            auto follow = std::make_shared<storage::Follow>(storage::deserialize_follow(follow_str));
-            follows.push_back(follow);
-    });
-    DEBUG("Done recieving follows...\n");
-
-    DEBUG("Inserting users into DB...\n");
-    for_each(users.begin(), users.end(), [&] (std::shared_ptr<storage::User> user) {
-        db->add_user(*user);
-    });
-
-    DEBUG("Inserting posts into DB...\n");
-    for_each(posts.begin(), posts.end(), [&] (std::shared_ptr<storage::Post> post) {
-        db->add_post(*post);
-    });
-
-    DEBUG("Inserting follows into DB...\n");
-    for_each(follows.begin(), follows.end(), [&] (std::shared_ptr<storage::Follow> follow) {
-        db->add_follow(*follow);
-    });
+    postman::apply_cluster_update(cu, db);
 
     close(sockfd);
 }
 
 std::string postman::serialize_cluster_update(ClusterUpdate cu) {
     std::string serialized = "";
-    serialized += cu.initiator->serialize() + '\n';
+    serialized += cu.initiator.serialize() + '\n';
 
     serialized += "NEW_USERS\n";
     for_each(cu.new_users.begin(), cu.new_users.end(), [&] (storage::User user) {
@@ -288,7 +215,7 @@ postman::ClusterUpdate postman::deserialize_cluster_update(std::string s) {
     ClusterUpdate cu;
     auto lines = util::split(s, '\n');
 
-    cu.initiator = std::make_shared<storage::Host>(storage::deserialize_host(lines[0]));
+    cu.initiator = storage::Host(storage::deserialize_host(lines[0]));
 
     enum Mode {
         NEW_USERS,
@@ -316,6 +243,7 @@ postman::ClusterUpdate postman::deserialize_cluster_update(std::string s) {
     for (size_t curr_line = 1; curr_line < lines.size()-1; curr_line++) {
         if (lines[curr_line] == "DONE") break;
         if (decode_mode(lines[curr_line]) != ERROR) {
+            DEBUG("Switching mode to %s\n", lines[curr_line].c_str());
             curr_mode = decode_mode(lines[curr_line]);
         } else {
             switch (curr_mode) {
@@ -344,11 +272,22 @@ postman::ClusterUpdate postman::deserialize_cluster_update(std::string s) {
     return cu;
 }
 
+storage::Host postman::next_host(std::shared_ptr<storage::DB> db) {
+    auto myself_host = db->myself_host;
+    auto itr = find_if(db->hosts.begin(), db->hosts.end(), [&] (storage::Host host) {
+        return myself_host.id < host.id;
+    });
+    if (itr != db->hosts.end()) {
+        return *itr;
+    } else {
+        return *db->hosts.begin();
+    }
+}
+
 void postman::pass_update(ClusterUpdate cu, std::shared_ptr<storage::DB> db) {
 
     ClusterUpdate dead_hosts; // hosts that fail to respond to pings are "dead", and we'll send this update around the cluster to indicate that they should be removed.
     dead_hosts.initiator = db->myself_host;
-    std::shared_ptr<storage::Host> next_host = db->myself_host->next;
     bool need_to_kill_nodes = false;
 
 
@@ -358,20 +297,22 @@ void postman::pass_update(ClusterUpdate cu, std::shared_ptr<storage::DB> db) {
             ERR("Failed to create socket: %s\n", strerror(errno));
             throw ConnectionFailure();
         }
+        auto next_host = postman::next_host(db);
         DEBUG("Socket Created!\n");
         struct sockaddr_in dest;
         memset(&dest, 0, sizeof(dest));
         dest.sin_family = AF_INET;
-        dest.sin_port = htons(next_host->port);
-        dest.sin_addr.s_addr = next_host->ip;
+        dest.sin_port = htons(next_host.port);
+        dest.sin_addr.s_addr = next_host.ip;
         // If a host fails to connect, we consider it dead and try the next one. It should then be removed from the cluster
         if (connect(sockfd, (sockaddr *) &dest, sizeof(dest)) != 0) {
-            dead_hosts.del_hosts.push_back(*next_host);
-            ERR("Noticed a dead node: %s\n", next_host->serialize().c_str());
-            next_host = next_host->next;
+            dead_hosts.del_hosts.push_back(next_host);
+            ERR("Noticed a dead node: %s\n", next_host.serialize().c_str());
+            db->hosts.erase(next_host);
             need_to_kill_nodes = true;
             continue;
         }
+        DEBUG("Passing update to host %s\n", next_host.serialize().c_str()); 
         if (need_to_kill_nodes) {
             int sockfd2;
             if ((sockfd2 = socket(PF_INET, SOCK_STREAM, 0)) == -1) {
@@ -386,6 +327,7 @@ void postman::pass_update(ClusterUpdate cu, std::shared_ptr<storage::DB> db) {
             apply_cluster_update(dead_hosts, db); // remove the nodes from ourselves
         }
 
+
         std::string update_msg = "MGMT\nCLUSTER_UPDATE\n" + serialize_cluster_update(cu) + "DONE\n";
         send(sockfd, update_msg.c_str(), update_msg.length(), 0); // send along actual update
 
@@ -396,28 +338,30 @@ void postman::pass_update(ClusterUpdate cu, std::shared_ptr<storage::DB> db) {
 void postman::apply_cluster_update(postman::ClusterUpdate cu, std::shared_ptr<storage::DB> db) {
     std::lock_guard<std::mutex>(db->sync_mutex);
 
+    DEBUG("Applying user adds\n");
     for_each(cu.new_users.begin(), cu.new_users.end(), [&] (storage::User user) {
         db->add_user(user);
     });
+    DEBUG("Applying post adds\n");
     for_each(cu.new_posts.begin(), cu.new_posts.end(), [&] (storage::Post post) {
         db->add_post(post);
     });
+    DEBUG("Applying follow adds\n");
     for_each(cu.new_follows.begin(), cu.new_follows.end(), [&] (storage::Follow follow) {
         db->add_follow(follow);
     });
     
+    DEBUG("Applying host adds\n");
     for_each(cu.new_hosts.begin(), cu.new_hosts.end(), [&] (storage::Host host) {
-        auto hp = std::make_shared<storage::Host>(host);
-        hp->next = db->myself_host->next;
-        db->myself_host->next = hp;
+        db->hosts.insert(host);
     });
+
+    DEBUG("Applying host dels\n");
     for_each(cu.del_hosts.begin(), cu.del_hosts.end(), [&] (storage::Host host) {
-        auto curr_host = db->myself_host;
-        while (curr_host->next != db->myself_host) {
-            if (*curr_host->next == host) {
-                curr_host->next = curr_host->next->next;
-            }
-        }
+        DEBUG("Removing dead host: %s\n", host.serialize().c_str());
+        db->hosts.erase(host);
     });
+
+    DEBUG("Done applying cluster update!\n");
 }
 

@@ -39,18 +39,18 @@ void execute_single_query(postman::Message query, std::shared_ptr<storage::DB> d
                 DEBUG("Replying with: %s\n", reply.c_str());
                 send(query.sockfd, reply.c_str(), reply.length(), 0);
             } else if (ds[1] == "POST") {
-                auto user_id = std::stoi(ds[2]);
+                auto username = util::hexdecode(ds[2]);
                 auto content = util::hexdecode(ds[3]);
                 auto timestamp = std::stoi(ds[4]);
-                auto post = db->add_post(user_id, content, timestamp);
+                auto post = db->add_post(username, content, timestamp);
                 cu.new_posts.push_back(post);
                 auto reply = storage::serialize_post(post) + "\nDONE\n";
                 DEBUG("Replying with: %s\n", reply.c_str());
                 send(query.sockfd, reply.c_str(), reply.length(), 0);
             } else if (ds[1] == "FOLLOW") {
-                auto followed_id = std::stoi(ds[2]);
-                auto follower_id = std::stoi(ds[3]);
-                auto follow = db->add_follow(followed_id, follower_id);
+                auto followed_username = util::hexdecode(ds[2]);
+                auto follower_username = util::hexdecode(ds[3]);
+                auto follow = db->add_follow(followed_username, follower_username);
                 cu.new_follows.push_back(follow);
                 auto reply = storage::serialize_follow(follow) + "\nDONE\n";
                 DEBUG("Replying with: %s\n", reply.c_str());
@@ -73,42 +73,30 @@ void execute_single_query(postman::Message query, std::shared_ptr<storage::DB> d
                     auto reply = storage::serialize_user(user) + "\nDONE\n";
                     DEBUG("Replying with: %s\n", reply.c_str());
                     send(query.sockfd, reply.c_str(), reply.length(), 0);
-                } else if (ds[3] == "USER_ID") {
-                    auto user_id = std::stoi(ds[4]);
-                    auto user = db->get_user_by_user_id(user_id);
-                    auto reply = storage::serialize_user(user) + "\nDONE\n";
-                    DEBUG("Replying with: %s\n", reply.c_str());
-                    send(query.sockfd, reply.c_str(), reply.length(), 0);
                 } else {
                     ERR("Invalid field to GET USER BY: %s\n", ds[3].c_str());
                     return;
                 }
             } else if (ds[1] == "POST" && ds[2] == "BY") {
-                if (ds[3] == "USER_ID") {
-                    auto user_id = std::stoi(ds[4]);
-                    auto posts = db->get_posts_by_user(db->get_user_by_user_id(user_id));
+                if (ds[3] == "USERNAME") {
+                    auto username = util::hexdecode(ds[4]);
+                    auto posts = db->get_posts_by_user(db->get_user_by_username(username));
                     for_each(posts.begin(), posts.end(), [&] (storage::Post post) {
-                            auto reply = storage::serialize_post(post) + '\n';
-                            DEBUG("Replying with: %s\n", reply.c_str());
-                            send(query.sockfd, reply.c_str(), reply.length(), 0);
-                            });
+                        auto reply = storage::serialize_post(post) + '\n';
+                        DEBUG("Replying with: %s\n", reply.c_str());
+                        send(query.sockfd, reply.c_str(), reply.length(), 0);
+                    });
                     std::string donemsg = "DONE\n";
                     send(query.sockfd, donemsg.c_str(), donemsg.length(), 0);
-                } else if (ds[3] == "POST_ID") {
-                    auto post_id = std::stoi(ds[4]);
-                    auto post = db->get_post_by_post_id(post_id);
-                    auto reply = storage::serialize_post(post) + "\nDONE\n";
-                    DEBUG("Replying with: %s\n", reply.c_str());
-                    send(query.sockfd, reply.c_str(), reply.length(), 0);
                 } else {
                     ERR("Invalid field to GET POST BY: %s\n", ds[3].c_str());
                     // TODO: reply with info
                     return;
                 }
             } else if (ds[1] == "FOLLOWS" && ds[2] == "BY") {
-                if (ds[3] == "FOLLOWER_ID") {
-                    auto follower_id = std::stoi(ds[4]);
-                    auto follows = db->get_follows_by_follower_id(follower_id);
+                if (ds[3] == "FOLLOWER") {
+                    auto follower_username = util::hexdecode(ds[4]);
+                    auto follows = db->get_follows_by_follower_username(follower_username);
                     for_each(follows.begin(), follows.end(), [&] (storage::Follow follow) {
                             auto reply = storage::serialize_follow(follow) + '\n';
                             DEBUG("Replying with: %s\n", reply.c_str());
@@ -116,9 +104,9 @@ void execute_single_query(postman::Message query, std::shared_ptr<storage::DB> d
                             });
                     std::string donemsg = "DONE\n";
                     send(query.sockfd, donemsg.c_str(), donemsg.length(), 0);
-                } else if (ds[3] == "FOLLOWED_ID") {
-                    auto followed_id = std::stoi(ds[4]);
-                    auto follows = db->get_follows_by_followed_id(followed_id);
+                } else if (ds[3] == "FOLLOWED") {
+                    auto followed_username = util::hexdecode(ds[4]);
+                    auto follows = db->get_follows_by_followed_username(followed_username);
                     for_each(follows.begin(), follows.end(), [&] (storage::Follow follow) {
                             auto reply = storage::serialize_follow(follow) + '\n';
                             DEBUG("Replying with: %s\n", reply.c_str());
@@ -183,33 +171,25 @@ Mgmt_Type decode_mgmt_type(std::string s_type) {
 }
 #undef DECODER
 
-// TODO: don't assume well-formed queries...
-void parser::parse_and_execute(std::vector<postman::Message> messages, std::shared_ptr<storage::DB> db) {
-    if (std::string(messages[0].data) == "QUERY") {
-        for_each(messages.begin()+1, messages.end(), [&] (postman::Message query) {
-                execute_single_query(query, db);
-        });
-    } else if (std::string(messages[0].data) == "MGMT") {
-        DEBUG("MGMT Command type: %s\n", messages[1].data);
-        auto update_type = decode_mgmt_type(messages[1].data);
-        switch (update_type) {
+void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_ptr<storage::DB> db) {
+    auto update_type = decode_mgmt_type(messages[1].data);
+    switch (update_type) {
         case ADD_NODE:
             {
                 std::lock_guard<std::mutex>(db->sync_mutex);
 
                 uint32_t addr = messages[2].sockaddr.sin_addr.s_addr;
-                uint32_t port = std::stoi(messages[2].data);
-                std::shared_ptr<storage::Host> new_host = 
-                     std::make_shared<storage::Host>(addr, port);
-                DEBUG("Adding node: %s\n", new_host->serialize().c_str());
+                auto msg_split = util::split(messages[2].data, ':');
+                uint32_t port = std::stoi(msg_split[0]);
+                uint32_t id = std::stoi(msg_split[1]);
+                storage::Host new_host =  storage::Host(addr, port, id);
+                DEBUG("Adding node: %s\n", new_host.serialize().c_str());
 
                 // send along the cluster toplogy (each node on a line, linked list from n -> n+1
-                auto curr_host = db->myself_host;
-                do {
-                    auto host_msg = curr_host->serialize() + '\n';
+                for_each(db->hosts.begin(), db->hosts.end(), [&] (storage::Host host) {
+                    auto host_msg = host.serialize() + '\n';
                     send(messages[0].sockfd, host_msg.c_str(), host_msg.length(), 0);
-                    curr_host = curr_host->next;
-                } while (curr_host != db->myself_host);
+                });
                 std::string done_msg = "DONE\n";
                 send(messages[0].sockfd, done_msg.c_str(), done_msg.length(), 0);
 
@@ -217,46 +197,44 @@ void parser::parse_and_execute(std::vector<postman::Message> messages, std::shar
 
                 postman::ClusterUpdate cu;
                 cu.initiator = db->myself_host;
-                cu.new_hosts.push_back(*new_host);
+                cu.new_hosts.push_back(new_host);
                 postman::pass_update(cu, db);
-                
-                // basically a linked list insert
-                new_host->next = db->myself_host->next;
-                db->myself_host->next = new_host;
+
+                // add new host to the cluster
+                db->hosts.insert(new_host);
 
                 std::string reply = "REPLY\n";
                 char buf[1024];
                 recv(messages[0].sockfd, buf, sizeof(buf), 0);
-                if (reply == buf) {
+                if (reply == std::string(buf)) {
                     DEBUG("Got READY, syncing data\n");
+                } else {
+                    ERR("Got weird reply: %s\n", buf);
                 }
+
+                postman::ClusterUpdate existing_data;
+                existing_data.initiator = db->myself_host;
 
                 // Propogate data to client
                 auto users = db->get_users();
                 for_each(users.begin(), users.end(), [&] (storage::User user) {
-                    std::string user_msg = serialize_user(user) + '\n';
-                    send(messages[0].sockfd, user_msg.c_str(), user_msg.length(), 0);
+                    existing_data.new_users.push_back(user);
                 });
-                send(messages[0].sockfd, done_msg.c_str(), done_msg.length(), 0);
 
-                DEBUG("Propogated Users\n");
-                
                 auto posts = db->get_posts();
                 for_each(posts.begin(), posts.end(), [&] (storage::Post post) {
-                    std::string post_msg = serialize_post(post) + '\n';
-                    send(messages[0].sockfd, post_msg.c_str(), post_msg.length(), 0);
+                    existing_data.new_posts.push_back(post);
                 });
-                send(messages[0].sockfd, done_msg.c_str(), done_msg.length(), 0);
 
-                DEBUG("Propogated Posts\n");
-                
                 auto follows = db->get_follows();
                 for_each(follows.begin(), follows.end(), [&] (storage::Follow follow) {
-                    std::string follow_msg = serialize_follow(follow) + '\n';
-                    send(messages[0].sockfd, follow_msg.c_str(), follow_msg.length(), 0);
+                    existing_data.new_follows.push_back(follow);
                 });
-                send(messages[0].sockfd, done_msg.c_str(), done_msg.length(), 0);
-                DEBUG("Propogated Follows\n");
+
+
+                auto serialized_data = postman::serialize_cluster_update(existing_data) + "DONE\n";
+                send(messages[0].sockfd, serialized_data.c_str(), serialized_data.length(), 0);
+                DEBUG("Sent existing data!\n");
             }
             break;
         case CONNECT:
@@ -279,12 +257,10 @@ void parser::parse_and_execute(std::vector<postman::Message> messages, std::shar
         case GET_HOSTS:
             {
                 DEBUG("Sending host list...\n");
-                auto curr_host = db->myself_host;
-                do {
-                    auto host_str = curr_host->serialize() + '\n';
+                for_each(db->hosts.begin(), db->hosts.end(), [&] (storage::Host host) {
+                    auto host_str = host.serialize() + '\n';
                     send(messages[0].sockfd, host_str.c_str(), host_str.length(), 0);
-                    curr_host = curr_host->next;
-                } while (curr_host != db->myself_host);
+                });
                 std::string done_msg = "DONE\n";
                 send(messages[0].sockfd, done_msg.c_str(), done_msg.length(), 0);
             }
@@ -294,13 +270,13 @@ void parser::parse_and_execute(std::vector<postman::Message> messages, std::shar
                 DEBUG("Cluster update recieved...\n");
                 std::vector<std::string> cup;
                 for_each(messages.begin()+2, messages.end(), [&] (postman::Message msg) {
-                    cup.push_back(msg.data);
-                });
+                        cup.push_back(msg.data);
+                        });
                 auto update = postman::deserialize_cluster_update(util::join(cup, '\n'));
 
 
                 // If we are the initiator, do nothing.
-                if (*update.initiator == *db->myself_host) break;
+                if (update.initiator == db->myself_host) break;
                 // apply update
                 DEBUG("Applying recieved update\n");
                 postman::apply_cluster_update(update, db);
@@ -323,7 +299,17 @@ void parser::parse_and_execute(std::vector<postman::Message> messages, std::shar
                 // TODO: return error to client
             }
             return;
-        }
+    }
+}
+
+// TODO: don't assume well-formed queries...
+void parser::parse_and_execute(std::vector<postman::Message> messages, std::shared_ptr<storage::DB> db) {
+    if (std::string(messages[0].data) == "QUERY") {
+        for_each(messages.begin()+1, messages.end()-1, [&] (postman::Message query) {
+                execute_single_query(query, db);
+        });
+    } else if (std::string(messages[0].data) == "MGMT") {
+        parse_and_execute_mgmt(messages, db);
     } else {
         ERR("Invalid message type: %s\n", messages[0].data);
     }

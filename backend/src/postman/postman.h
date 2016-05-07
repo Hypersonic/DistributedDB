@@ -42,7 +42,7 @@ namespace postman {
     };
 
     struct ClusterUpdate {
-        std::shared_ptr<storage::Host> initiator;
+        storage::Host initiator;
 
         std::vector<storage::User>     new_users;
         std::vector<storage::Post>     new_posts;
@@ -54,6 +54,8 @@ namespace postman {
 
     std::string serialize_cluster_update(ClusterUpdate cu);
     ClusterUpdate deserialize_cluster_update(std::string s);
+
+    storage::Host next_host(std::shared_ptr<storage::DB> db);
 
     void apply_cluster_update(ClusterUpdate cu, std::shared_ptr<storage::DB> db);
 
