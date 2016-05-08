@@ -70,12 +70,12 @@ std::vector<Post> DB::get_posts_by_user(User user) {
 
     while (lo != hi) {
         lo = find_if(lo, hi, post_matches);
-        results.push_back(*lo);
         // The predicate for this loop is probably redundant, because
         // this will be hit... oh well
         if (lo == hi) {
             break;
         }
+        results.push_back(*lo);
         lo++;
     }
 
@@ -118,12 +118,12 @@ std::vector<Follow> DB::get_follows_by_followed_username(std::string followed_us
 
     while (lo != hi) {
         lo = find_if(lo, hi, follow_matches);
-        results.push_back(*lo);
         // The predicate for this loop is probably redundant, because
         // this will be hit... oh well
         if (lo == hi) {
             break;
         }
+        results.push_back(*lo);
         lo++;
     }
 
@@ -145,12 +145,12 @@ std::vector<Follow> DB::get_follows_by_follower_username(std::string follower_us
 
     while (lo != hi) {
         lo = find_if(lo, hi, follow_matches);
-        results.push_back(*lo);
         // The predicate for this loop is probably redundant, because
         // this will be hit... oh well
         if (lo == hi) {
             break;
         }
+        results.push_back(*lo);
         lo++;
     }
 
