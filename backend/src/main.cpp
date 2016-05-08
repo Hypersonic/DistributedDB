@@ -5,6 +5,8 @@
 #include "globals.h"
 #include <signal.h>
 #include <fstream>
+#include <chrono>
+#include <thread>
 
 std::shared_ptr<postman::Postman> postmaster_general;
 std::shared_ptr<storage::DB> mt_gox; // the global db
@@ -66,7 +68,9 @@ int main(int argc, char **argv) {
 
 
 
-    while(postmaster_general->listen_thread.joinable()) {};
+    while(postmaster_general->listen_thread.joinable()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    };
     DEBUG("Exiting...\n");
     return 0;
 }

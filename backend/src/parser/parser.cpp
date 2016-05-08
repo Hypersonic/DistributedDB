@@ -183,7 +183,7 @@ void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_
                 uint32_t port = std::stoi(msg_split[0]);
                 uint32_t id = std::stoi(msg_split[1]);
                 storage::Host new_host =  storage::Host(addr, port, id);
-                DEBUG("Adding node: %s\n", new_host.serialize().c_str());
+                LOG("Adding node: %s\n", new_host.serialize().c_str());
 
                 // send along the cluster toplogy (each node on a line, linked list from n -> n+1
                 for_each(db->hosts.begin(), db->hosts.end(), [&] (storage::Host host) {
@@ -203,14 +203,9 @@ void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_
                 // add new host to the cluster
                 db->hosts.insert(new_host);
 
-                std::string reply = "REPLY\n";
+                // the client will send a message indicating that it's ready to proceed
                 char buf[1024];
                 recv(messages[0].sockfd, buf, sizeof(buf), 0);
-                if (reply == std::string(buf)) {
-                    DEBUG("Got READY, syncing data\n");
-                } else {
-                    ERR("Got weird reply: %s\n", buf);
-                }
 
                 postman::ClusterUpdate existing_data;
                 existing_data.initiator = db->myself_host;
@@ -235,12 +230,13 @@ void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_
                 auto serialized_data = postman::serialize_cluster_update(existing_data) + "DONE\n";
                 send(messages[0].sockfd, serialized_data.c_str(), serialized_data.length(), 0);
                 DEBUG("Sent existing data!\n");
+                LOG("Node added successfully!\n");
             }
             break;
         case CONNECT:
             {
                 std::lock_guard<std::mutex>(db->sync_mutex);
-                DEBUG("Connecting to cluster...\n");
+                LOG("Connecting to cluster...\n");
                 auto splits = util::split(messages[2].data, ':');
                 auto host = splits[0];
                 auto port = std::stoi(splits[1]);
@@ -252,6 +248,7 @@ void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_
                     send(messages[0].sockfd, error_msg.c_str(), error_msg.length(), 0);
                     return;
                 }
+                LOG("Connected!\n");
             }
             break;
         case GET_HOSTS:
