@@ -15,9 +15,14 @@
             <h3>Posts by people you follow:</h3>
             <ul>
             {% for post in posts %}
-            <li>{{ followed_user_map[post.user_id].username }} said: {{ post.content }} at {{ time.ctime(post.timestamp) }}</li>
+            {% if session['username'] != post.username %}
+                <li><a href="/profile/{{ post.username }}">{{ post.username }}</a> said: {{ post.content }} at {{ time.ctime(post.timestamp) }}</li>
+            {% else %}
+                <li>You said: {{ post.content }} at {{ time.ctime(post.timestamp) }}</li>
+            {% endif %}
             {% endfor %}
             </ul>
+            <h5>Post:</h5>
             <form name=post action='/post' method=POST>
                 <input type="text" name="content">
                 <button type="submit">Submit</button>

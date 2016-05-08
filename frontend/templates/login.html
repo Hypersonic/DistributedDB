@@ -1,13 +1,28 @@
 <html>
     <title>Login</title>
 <body>
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul class="flashes">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
     <h3>Login</h3>
-    {% if login_failed %}
-    Login failed!
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul class=flashes>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
     {% endif %}
+    {% endwith %}
     <form name=login method=POST>
-        <input type="text" name="username">
-        <input type="password" name="password">
+        <input type="text" name="username" placeholder="username">
+        <input type="password" name="password" placeholder="password">
         <button type="submit">Submit</button>
     </form>
 </body>

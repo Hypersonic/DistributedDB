@@ -62,6 +62,9 @@ class User(object):
             posts.append(p)
         return posts
 
+    def make_post(self, content):
+        return Post.new(self, content)
+
     def get_followers(self):
         # caution! This takes n+1 queries, with n being the number of follows our poor user has
         followers = []

@@ -1,0 +1,50 @@
+<html>
+<title>Profile for {{ user.username }}</title>
+<body>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul class="flashes">
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    <h3>User {{ user.username }}</h3>
+    {% if 'username' in session and user.username == session['username'] %}
+    <div>
+        <h5>Create new post:</h5>
+        <form name=post action='/post' method=POST>
+            <input type="text" name="content" placeholder="The quick brown fox jumped over the lazy dog">
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+    {% elif 'username' in session %}
+    <p><a href="/follow/{{user.username}}">Follow {{user.username}}</a></p>
+    {% endif %}
+    <div>
+        <h5>Posts:</h5>
+        <ol>
+            {% for post in user.get_posts()[::-1] %}
+            <li>{{post.content}}</li>
+            {% endfor %}
+        </ol>
+    </div>
+    <div>
+        <h5>Is following:</h5>
+        <ol>
+            {% for follow in user.get_follows() %}
+            <li><a href="/profile/{{follow.username}}">{{follow.username}}</a></li>
+            {% endfor %}
+        </ol>
+    </div>
+    <div>
+        <h5>Followers:</h5>
+        <ol>
+            {% for follower in user.get_followers() %}
+            <li><a href="/profile/{{follower.username}}">{{follower.username}}</a></li>
+            {% endfor %}
+        </ol>
+    </div>
+</body>
+</html>

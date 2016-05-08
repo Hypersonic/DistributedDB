@@ -12,6 +12,7 @@ def update_dbs():
         try:
             s.connect(serv)
         except socket.error: # connection issue
+            print "Server is dead, removing:",serv
             known_dbs.remove(serv)
             serv = None
     s.send("MGMT\nGET_HOSTS\nDONE\n")
@@ -33,6 +34,7 @@ def send_request(req):
     serv = random.choice(known_dbs)
     s = socket.socket()
     serv = random.choice(known_dbs)
+    print "Making request to:",serv
     s.connect(serv)
     s.send("QUERY\n" + req + '\nDONE\n')
     resp = ""

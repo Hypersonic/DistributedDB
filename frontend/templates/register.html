@@ -2,9 +2,18 @@
     <title>Register</title>
 <body>
     <h3>Register</h3>
-    <form name=login method=POST>
-        <input type="text" name="username">
-        <input type="password" name="password">
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul class=flashes>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    <form name=Register method=POST>
+        <input type="text" name="username" placeholder="username">
+        <input type="password" name="password" placeholder="password">
         <button type="submit">Submit</button>
     </form>
 </body>
