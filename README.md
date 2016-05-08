@@ -3,6 +3,8 @@ FleetBeetStreet
 
 This is a masterless, quorumless distributed database, hardcoded for a specific task (a twitter clone).
 
+The frontend assumes at least one member of the cluster is sitting on `localhost:3004`. You can change this by chainging the `known_hosts` array in `frontend/db.py` to point to your favorite DB host.
+
 It chooses A and P over C, so try not to make conflicting queries :)
 
 Some useful scripts for cluster manipulation are in `/scripts`
