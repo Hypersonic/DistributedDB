@@ -1,4 +1,4 @@
-from db import add_user, get_user, add_post, get_post, add_follow
+from db import add_user, get_user, add_post, add_follow, get_users_posts, get_users_followed_usernames, get_users_follower_usernames
 from time import time
 from hashlib import sha1
 
@@ -10,7 +10,6 @@ class User(object):
         """
         Don't call this constructor directly -- use one of the User.from_X or User.new functions
         """
-        self.uuid = None
         self.username = None
         self.hashed_pass = None
 
@@ -38,25 +37,10 @@ class User(object):
         """
         db_data = add_user(username, hashed_pass)
         u = User()
-        u.uuid = db_data[0]
-        u.username = db_data[1]
-        u.hashed_pass = db_data[2]
+        u.username = db_data[0]
+        u.hashed_pass = db_data[1]
         return u
     
-    @staticmethod
-    def from_uuid(uuid):
-        """
-        Returns a user from the database with the associated uuid
-        
-        raises a KeyError if the user does not exist in the database
-        """
-        db_data = get_user(uuid=uuid)
-        u = User()
-        u.uuid = db_data[0]
-        u.username = db_data[1]
-        u.hashed_pass = db_data[2]
-        return u
-
     @staticmethod
     def from_username(username):
         """
@@ -64,17 +48,37 @@ class User(object):
 
         raises a KeyError if the user does not exist in the database
         """
-        db_data = get_user(username=username)
+        db_data = get_user(username)
         u = User()
-        u.uuid = db_data[0]
-        u.username = db_data[1]
-        u.hashed_pass = db_data[2]
+        u.username = db_data[0]
+        u.hashed_pass = db_data[1]
         return u
+
+    def get_posts(self):
+        posts = []
+        for post in get_users_posts(self.username):
+            p = Post()
+            p.username, p.content, p.timestamp = post;
+            posts.append(p)
+        return posts
+
+    def get_followers(self):
+        # caution! This takes n+1 queries, with n being the number of follows our poor user has
+        followers = []
+        for follower_username in get_users_follower_usernames(self.username):
+            followers.append(User.from_username(follower_username))
+        return followers
+
+    def get_follows(self):
+        # caution! This takes n+1 queries, with n being the number of follows our poor user has
+        follows = []
+        for followed_username in get_users_followed_usernames(self.username):
+            follows.append(User.from_username(followed_username))
+        return follows
 
 class Post(object):
     def __init__(self):
-        self.post_id = None
-        self.user_id = None
+        self.username = None
         self.content = None
         self.timestamp = None
 
@@ -86,39 +90,23 @@ class Post(object):
         Raises a KeyError if the user already exists
         """
         now = int(time())
-        db_data = add_post(user.uuid, content, now)
+        db_data = add_post(user.username, content, now)
         p = Post()
-        p.post_id = db_data[0]
-        p.user_id = db_data[1]
-        p.content = db_data[2]
-        p.timestamp = db_data[3]
+        p.username = db_data[0]
+        p.content = db_data[1]
+        p.timestamp = db_data[2]
         return p
 
-    @staticmethod
-    def from_post_id(post_id):
-        """
-        Returns a post from the database with the associated post_id
-
-        raises a KeyError if the post does not exist in the database
-        """
-        db_data = get_post(post_id=post_id)
-        p = Post()
-        p.post_id = db_data[0]
-        p.user_id = db_data[1]
-        p.content = db_data[2]
-        p.timestamp = db_data[3]
-        p.timestamp = db_data[3]
-        return p
 
 class Follow(object):
     def __init__(self):
-        self.followed_id = None
-        self.follower_id = None
+        self.followed_username = None
+        self.follower_username = None
 
     @staticmethod
-    def new(followed_id, follower_id):
-        db_data = add_follow(followed_id, follower_id)
+    def new(followed_username, follower_username):
+        db_data = add_follow(followed_username, follower_username)
         p = Follow()
-        p.followed_id = db_data[0]
-        p.follower_id = db_data[1]
+        p.followed_username = db_data[0]
+        p.follower_username = db_data[1]
         return p
