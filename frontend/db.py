@@ -29,8 +29,8 @@ def update_dbs():
 
 
 def send_request(req):
-    global known_dbs
     update_dbs() # we'll update dbs before every request because why not
+    global known_dbs
     serv = random.choice(known_dbs)
     s = socket.socket()
     serv = random.choice(known_dbs)
