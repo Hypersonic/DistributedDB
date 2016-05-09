@@ -185,6 +185,22 @@ void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_
                 storage::Host new_host =  storage::Host(addr, port, id);
                 LOG("Adding node: %s\n", new_host.serialize().c_str());
 
+                postman::ClusterUpdate cu;
+                cu.initiator = db->myself_host;
+                cu.new_hosts.push_back(new_host);
+
+                // if we have an existing thing on this ip:port, we can assume the
+                // node died and came back up with a different number, and we never
+                // pinged it while it was down. Let's remove it now, otherwise bad
+                // things will happen :(
+                auto itr = find_if(db->hosts.begin(), db->hosts.end(), [&] (storage::Host host) {
+                    return new_host.ip == host.ip && new_host.port == host.port; 
+                });
+                if (itr != db->hosts.end()) {
+                    cu.del_hosts.push_back(*itr);
+                    db->hosts.erase(itr);
+                }
+
                 // send along the cluster toplogy (each node on a line, linked list from n -> n+1
                 for_each(db->hosts.begin(), db->hosts.end(), [&] (storage::Host host) {
                     auto host_msg = host.serialize() + '\n';
@@ -195,10 +211,9 @@ void parse_and_execute_mgmt(std::vector<postman::Message> messages, std::shared_
 
                 DEBUG("Sent Cluster topology\n");
 
-                postman::ClusterUpdate cu;
-                cu.initiator = db->myself_host;
-                cu.new_hosts.push_back(new_host);
+
                 postman::pass_update(cu, db);
+
 
                 // add new host to the cluster
                 db->hosts.insert(new_host);
