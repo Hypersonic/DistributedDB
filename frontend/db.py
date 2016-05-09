@@ -26,14 +26,16 @@ def update_dbs():
         ip, port, s_id = serv.split(':')
         new_dbs.append((ip, int(port)))
     known_dbs = new_dbs
+    return new_dbs
 
 
 def send_request(req):
-    update_dbs() # we'll update dbs before every request because why not
-    global known_dbs
-    serv = random.choice(known_dbs)
+    #there's a potential race condition here where we can update dbs,
+    # then a node can go down, and we try to query that node.
+    # oh well :/
+    dbs = update_dbs() # we'll update dbs before every request because why not
     s = socket.socket()
-    serv = random.choice(known_dbs)
+    serv = random.choice(dbs)
     print "Making request to:",serv
     s.connect(serv)
     s.send("QUERY\n" + req + '\nDONE\n')
