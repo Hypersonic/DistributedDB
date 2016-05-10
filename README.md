@@ -7,6 +7,8 @@ The frontend assumes at least one member of the cluster is sitting on `localhost
 
 It chooses A and P over C, so try not to make conflicting queries :)
 
+The clustering works via a ring topology. Basically, each node picks an ID on startup, and all nodes know the full set of nodes on the network. They then send to the node with the first id greater than theirs (with the highest node sending to the lowest node). When a node gets an update that it initiated, it drops it, otherwise it applys the update and passes it on to the next node in the sequence.
+
 Some useful scripts for cluster manipulation are in `/scripts`
 
 Query structure:
